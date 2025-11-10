@@ -1,7 +1,7 @@
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, x-pushinpay-token',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
 export default async function handler(req, res) {
@@ -9,7 +9,7 @@ export default async function handler(req, res) {
     return res.status(200)
       .setHeader('Access-Control-Allow-Origin', '*')
       .setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
-      .setHeader('Access-Control-Allow-Headers', 'Content-Type, x-pushinpay-token')
+      .setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
       .end();
   }
 
@@ -18,35 +18,36 @@ export default async function handler(req, res) {
   }
 
   try {
-    const webhookToken = process.env.PUSHINPAY_WEBHOOK_TOKEN;
-    const receivedToken = req.headers['x-pushinpay-token'];
-
-    if (!webhookToken) {
-      console.error('PUSHINPAY_WEBHOOK_TOKEN não configurado');
-      return res.status(500)
-        .setHeader('Access-Control-Allow-Origin', '*')
-        .json({ error: 'Token webhook não configurado' });
-    }
-
-    if (receivedToken !== webhookToken) {
-      console.error('Token inválido recebido:', receivedToken);
-      return res.status(401)
-        .setHeader('Access-Control-Allow-Origin', '*')
-        .json({ error: 'Token inválido' });
-    }
-
     const webhookData = req.body;
+    const requestBody = webhookData.requestBody || webhookData;
 
     console.log('=== WEBHOOK RECEBIDO ===');
     console.log('Timestamp:', new Date().toISOString());
-    console.log('Dados:', JSON.stringify(webhookData, null, 2));
-    console.log('Status:', webhookData.status);
-    console.log('ID da transação:', webhookData.id);
-    console.log('Valor:', webhookData.value);
+    console.log('Dados completos:', JSON.stringify(webhookData, null, 2));
     console.log('========================');
 
-    if (webhookData.status === 'paid') {
-      console.log(`✓ Pagamento confirmado para transação ${webhookData.id}`);
+    const transactionId = requestBody.transactionId || requestBody.id;
+    const status = requestBody.status;
+    const amount = requestBody.amount;
+    const transactionType = requestBody.transactionType;
+
+    console.log('Transaction ID:', transactionId);
+    console.log('Status:', status);
+    console.log('Amount:', amount);
+    console.log('Type:', transactionType);
+
+    if (status === 'PAID' && transactionType === 'RECEIVEPIX') {
+      console.log(`✓ Pagamento confirmado para transação ${transactionId}`);
+      console.log(`✓ Valor: R$ ${amount}`);
+
+      if (requestBody.creditParty) {
+        console.log('Credor:', requestBody.creditParty.name);
+        console.log('Email:', requestBody.creditParty.email);
+      }
+
+      if (requestBody.dateApproval) {
+        console.log('Data de aprovação:', requestBody.dateApproval);
+      }
     }
 
     return res.status(200)

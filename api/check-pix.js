@@ -3,7 +3,7 @@ import fetch from 'node-fetch';
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, x-pushinpay-token',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
 export default async function handler(req, res) {
@@ -11,7 +11,7 @@ export default async function handler(req, res) {
     return res.status(200)
       .setHeader('Access-Control-Allow-Origin', '*')
       .setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
-      .setHeader('Access-Control-Allow-Headers', 'Content-Type, x-pushinpay-token')
+      .setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
       .end();
   }
 
@@ -28,20 +28,19 @@ export default async function handler(req, res) {
         .json({ error: 'ID da transação não fornecido' });
     }
 
-    const token = process.env.PUSHINPAY_TOKEN;
+    const checkUrl = process.env.GATEWAY_CHECK_URL;
+    const apiKey = process.env.GATEWAY_API_KEY;
 
-    if (!token) {
+    if (!checkUrl || !apiKey) {
       return res.status(500)
         .setHeader('Access-Control-Allow-Origin', '*')
-        .json({ error: 'Token PushinPay não configurado' });
+        .json({ error: 'Credenciais do gateway não configuradas' });
     }
 
-    const pushinpayUrl = `https://api.pushinpay.com.br/api/transactions/${id}`;
-
-    const response = await fetch(pushinpayUrl, {
+    const response = await fetch(`${checkUrl}/${id}`, {
       method: 'GET',
       headers: {
-        'Authorization': `Bearer ${token}`,
+        'Authorization': `Bearer ${apiKey}`,
         'Accept': 'application/json',
       },
     });
@@ -55,16 +54,20 @@ export default async function handler(req, res) {
     }
 
     const data = await response.json();
+    const requestBody = data.requestBody || data;
+
+    const status = requestBody.status === 'PAID' ? 'paid' : requestBody.status?.toLowerCase() || 'pending';
+    const amount = requestBody.amount || 0;
 
     return res.status(200)
       .setHeader('Access-Control-Allow-Origin', '*')
       .setHeader('Content-Type', 'application/json')
       .json({
-        id: data.id,
-        status: data.status,
-        value: data.value,
-        created_at: data.created_at,
-        updated_at: data.updated_at,
+        id: requestBody.transactionId || requestBody.id || id,
+        status: status,
+        value: Math.round(amount * 100),
+        created_at: requestBody.dateApproval || new Date().toISOString(),
+        updated_at: requestBody.dateApproval || new Date().toISOString(),
       });
 
   } catch (error) {
